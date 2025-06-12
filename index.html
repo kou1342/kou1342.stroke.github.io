@@ -91,7 +91,7 @@
         smoking_status: parseInt(document.getElementById('smoking_status').value)
       };
       const inputTensor = new ort.Tensor('float32', preprocess(raw), [1, 10]);
-      const feeds = { float_input: inputTensor }; // 入力名はONNX変換時の名前に合わせる
+      const feeds = { float_input: 'stroke_model.onnx' }; // 入力名はONNX変換時の名前に合わせる
       const results = await session.run(feeds);
       const outputName = session.outputNames[0];
       const score = results[outputName].data[0];
