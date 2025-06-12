@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>脳卒中発症リスク予測アプリ</title>
+  <!-- ONNX Runtime Web の読み込み -->
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; background-color: #f5f5f5; margin: 2rem; }
+    .container { background-color: #fff; padding: 2rem; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); max-width: 600px; margin: auto; }
+    h1 { text-align: center; }
+    label, select, input { display: block; width: 100%; margin-bottom: 1rem; }
+    button { padding: 1rem; background-color: #007BFF; color: #fff; border: none; width: 100%; border-radius: 5px; cursor: pointer; }
+    button:hover { background-color: #0056b3; }
+    #result { text-align: center; font-size: 1.2rem; margin-top: 1rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>脳卒中発症リスク予測アプリ</h1>
+    <form id="predictForm">
+      <label>性別: <select id="gender">
+        <option value="0">Male</option>
+        <option value="1">Female</option>
+        <option value="2">Other</option>
+      </select></label>
+      <label>年齢: <input type="number" id="age" step="0.1" required></label>
+      <label>高血圧: <select id="hypertension"><option value="0">No</option><option value="1">Yes</option></select></label>
+      <label>心疾患: <select id="heart_disease"><option value="0">No</option><option value="1">Yes</option></select></label>
+      <label>結婚歴: <select id="ever_married"><option value="0">No</option><option value="1">Yes</option></select></label>
+      <label>職業: <select id="work_type">
+        <option value="0">Private</option>
+        <option value="1">Self-employed</option>
+        <option value="2">Govt_job</option>
+        <option value="3">children</option>
+        <option value="4">Never_worked</option>
+      </select></label>
+      <label>居住地: <select id="Residence_type"><option value="0">Urban</option><option value="1">Rural</option></select></label>
+      <label>平均血糖値: <input type="number" id="avg_glucose_level" step="0.1" required></label>
+      <label>BMI: <input type="number" id="bmi" step="0.1" required></label>
+      <label>喫煙歴: <select id="smoking_status">
+        <option value="0">never smoked</option>
+        <option value="1">formerly smoked</option>
+        <option value="2">smokes</option>
+        <option value="3">Unknown</option>
+      </select></label>
+      <button type="submit">予測する</button>
+    </form>
+    <div id="result"></div>
+  </div>
+
+  <script>
+    // 学習時の平均・標準偏差
+    const MEANS = { age:  43.353288, avg_glucose_level: 106.317167, bmi: 28.922180 };
+    const STDS  = { age: 22.596816, avg_glucose_level: 45.259652, bmi: 7.761735 };
+    // ONNX モデルセッション
+    let session;
+
+    // 前処理：標準化＋エンコーディング
+    function preprocess(data) {
+      return Float32Array.from([
+        (data.age - MEANS.age) / STDS.age,
+        data.gender,
+        data.hypertension,
+        data.heart_disease,
+        data.ever_married,
+        data.work_type,
+        data.Residence_type,
+        (data.avg_glucose_level - MEANS.avg_glucose_level) / STDS.avg_glucose_level,
+        (data.bmi - MEANS.bmi) / STDS.bmi,
+        data.smoking_status
+      ]);
+    }
+
+    async function initModel() {
+      session = await ort.InferenceSession.create('stroke_model.onnx');
+    }
+
+    document.getElementById('predictForm').addEventListener('submit', async e => {
+      e.preventDefault();
+      const raw = {
+        gender: parseInt(document.getElementById('gender').value),
+        age: parseFloat(document.getElementById('age').value),
+        hypertension: parseInt(document.getElementById('hypertension').value),
+        heart_disease: parseInt(document.getElementById('heart_disease').value),
+        ever_married: parseInt(document.getElementById('ever_married').value),
+        work_type: parseInt(document.getElementById('work_type').value),
+        Residence_type: parseInt(document.getElementById('Residence_type').value),
+        avg_glucose_level: parseFloat(document.getElementById('avg_glucose_level').value),
+        bmi: parseFloat(document.getElementById('bmi').value),
+        smoking_status: parseInt(document.getElementById('smoking_status').value)
+      };
+      const inputTensor = new ort.Tensor('float32', preprocess(raw), [1, 10]);
+      const feeds = { float_input: inputTensor }; // 入力名はONNX変換時の名前に合わせる
+      const results = await session.run(feeds);
+      const outputName = session.outputNames[0];
+      const score = results[outputName].data[0];
+      document.getElementById('result').innerText =
+        score > 0.5
+        ? '⚠️ 脳卒中リスクが高い可能性があります。専門医へご相談ください。'
+        : '✅ 脳卒中リスクは低いと予測されます。';
+    });
+
+    // モデル初期化
+    initModel().catch(err => console.error('ONNX model load error:', err));
+  </script>
+</body>
+</html>
